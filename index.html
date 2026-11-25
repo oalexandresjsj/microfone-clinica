@@ -64,8 +64,20 @@
     const hoje = baseISO || dataHojeISO();
     const dow = diaDaSemana(hoje);
     const cortes = [];
+    const reservados = [];
     let data = '', hora = '';
-    const livre = (i, f) => !cortes.some(c => i < c[1] && f > c[0]);
+    // Trechos de duração ("por 1 hora", "1h30 de duração") não são horário: ficam na nota, mas fora da busca de data/hora
+    (() => {
+      const NUMD = '(\\d{1,2}|um|uma|dois|duas|tres|quatro)';
+      const res = [
+        new RegExp('\\b(?:por|durante|com duracao de|duracao de|duracao)\\s+' + NUMD + '\\s*(?:horas?|hs|h)(?:\\s*(?:e\\s*)?(?:\\d{2}|meia))?(?![\\da-z])', 'g'),
+        new RegExp('\\b' + NUMD + '\\s*(?:horas?|hs|h)(?:\\s*(?:e\\s*)?(?:\\d{2}|meia))?\\s+de\\s+duracao\\b', 'g'),
+        /\b(?:por|durante|duracao de|duracao)\s+\d{2,3}\s*min(?:utos?)?\b/g,
+        /\b(?:por|durante)\s+meia\s+hora\b/g
+      ];
+      res.forEach(re => { let m; while ((m = re.exec(t))) reservados.push([m.index, m.index + m[0].length]); });
+    })();
+    const livre = (i, f) => !cortes.some(c => i < c[1] && f > c[0]) && !reservados.some(c => i < c[1] && f > c[0]);
     const achar = (re, fn) => {
       const g = new RegExp(re.source, 'g');
       let m;
@@ -256,24 +268,26 @@
     fetch(cfg.url, { method: 'POST', body: JSON.stringify(corpo), redirect: 'follow' })
       .then(r => r.json())
       .then(r => {
-        if (r && r.sucesso) concluir(corpo, p);
+        if (r && r.sucesso) concluir(corpo, p, false, r);
         else { salvando = false; mostrar('Não salvou', r && r.erro === 'nao_autorizado' ? 'Código secreto incorreto. Abra a página pelo botão do app.' : 'O servidor recusou a nota: ' + ((r && r.erro) || 'erro desconhecido'), 'erro'); }
       })
       .catch(() => {
         // Sem resposta legível: tenta de novo só para enviar (sem ler o retorno)
         fetch(cfg.url, { method: 'POST', body: JSON.stringify(corpo), mode: 'no-cors' })
-          .then(() => concluir(corpo, p, true))
+          .then(() => { salvando = false; mostrar('Não confirmado', 'Enviei a nota, mas o servidor não respondeu. Confira em Notas no app. Se ela não estiver lá, o acesso do app precisa estar como "Qualquer pessoa" (Implantar > Gerenciar implantações).', 'erro'); })
           .catch(() => { salvando = false; mostrar('Sem conexão', 'Não consegui enviar a nota. Confira a internet e o endereço do app.', 'erro'); });
       });
   }
 
-  function concluir(corpo, p, incerto) {
-    document.getElementById('titulo').textContent = incerto ? 'Enviada' : 'Nota salva ✓';
+  function concluir(corpo, p, incerto, r) {
+    const ag = (r && r.agendamento) || '';
+    const titulos = { 'Agendado': 'Agendado ✓', 'Confirmar paciente novo': 'Nota salva — confirme no app', 'Sem vaga': 'Nota salva — sem vaga', 'Revisar': 'Nota salva — revisar no app' };
+    document.getElementById('titulo').textContent = incerto ? 'Enviada' : (titulos[ag] || 'Nota salva ✓');
     const t = document.getElementById('texto');
-    t.className = 'texto ok';
-    t.textContent = corpo.nota;
+    t.className = 'texto ' + (ag === 'Agendado' || !ag ? 'ok' : 'erro');
+    t.textContent = (r && r.mensagem) ? r.mensagem : corpo.nota;
     document.getElementById('chips').innerHTML = rotulo(p).map(c => '<span class="chip">' + c + '</span>').join('');
-    setTimeout(() => window.close(), 1300);
+    setTimeout(() => window.close(), ag && ag !== 'Agendado' ? 6000 : (ag === 'Agendado' ? 4000 : 1300));
   }
 
   window.addEventListener('load', () => {
