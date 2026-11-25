@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nota por voz</title>
+<style>
+  :root { --laranja:#F26B1D; --vermelho:#C83C3C; --verde:#2E8B57; --texto:#3A3A32; --fundo:#F5F4F0; }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--fundo); font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--texto); padding:16px; }
+  .cartao { width:100%; max-width:360px; background:#FFF3B0; border-radius:4px 4px 18px 4px; padding:18px; box-shadow:0 8px 24px rgba(0,0,0,.18); }
+  .titulo { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#8A6D00; margin-bottom:8px; }
+  .texto { font-size:17px; line-height:1.45; min-height:84px; white-space:pre-wrap; word-break:break-word; }
+  .chips { min-height:26px; margin-top:8px; }
+  .chip { display:inline-block; font-size:12px; font-weight:600; background:rgba(255,255,255,.7); padding:4px 10px; border-radius:999px; margin-right:6px; }
+  .acoes { display:flex; gap:8px; margin-top:14px; align-items:center; }
+  button { font:inherit; cursor:pointer; border:none; border-radius:999px; padding:10px 16px; font-weight:600; }
+  .sec { background:rgba(255,255,255,.7); color:var(--texto); }
+  .pri { background:var(--laranja); color:#fff; }
+  .mic { width:56px; height:56px; padding:0; margin-left:auto; background:var(--laranja); color:#fff; display:flex; align-items:center; justify-content:center; }
+  .mic svg { width:26px; height:26px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .mic.ouvindo { background:var(--vermelho); animation:pulso 1.3s infinite; }
+  @keyframes pulso { 0% { box-shadow:0 0 0 0 rgba(200,60,60,.5); } 70% { box-shadow:0 0 0 16px rgba(200,60,60,0); } 100% { box-shadow:0 0 0 0 rgba(200,60,60,0); } }
+  .ok { color:var(--verde); font-weight:700; }
+  .erro { color:var(--vermelho); font-weight:600; }
+  label { display:block; font-size:12px; margin-top:10px; }
+  input { width:100%; padding:9px; border:1px solid #d6c96a; border-radius:10px; font:inherit; margin-top:4px; background:#fffdf0; }
+  .oculto { display:none; }
+</style>
+</head>
+<body>
+<div class="cartao">
+  <div class="titulo" id="titulo">Nota por voz</div>
+
+  <div id="telaNota">
+    <div class="texto" id="texto">Pode falar…</div>
+    <div class="chips" id="chips"></div>
+    <div class="acoes">
+      <button type="button" class="sec" id="btnCancelar" onclick="cancelar()">Cancelar</button>
+      <button type="button" class="pri" id="btnSalvar" onclick="pararESalvar()">Parar e salvar</button>
+      <button type="button" class="mic" id="btnMic" onclick="alternar()" title="Falar"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+    </div>
+  </div>
+
+  <div id="telaConfig" class="oculto">
+    <div class="texto" style="min-height:0;font-size:14px">Abra esta página pelo botão de microfone do app Gestão Clínica, que ele configura sozinho. Ou preencha à mão:</div>
+    <label>Endereço do app (termina em /exec)<input id="cfgUrl" placeholder="https://script.google.com/macros/s/.../exec"></label>
+    <label>Código secreto<input id="cfgToken" placeholder="o mesmo que está no Code.gs"></label>
+    <div class="acoes"><button type="button" class="pri" onclick="salvarConfig()">Salvar configuração</button></div>
+  </div>
+</div>
+
+<script>
+  const CHAVE = 'micClinicaCfg';
+  let cfg = null, rec = null, ativo = false, cancelado = false, textoMic = '', timer = null, salvando = false;
+
+    function semAcento(s) {
+    return s.replace(/[áàâãä]/g, 'a').replace(/[éèêë]/g, 'e').replace(/[íìîï]/g, 'i').replace(/[óòôõö]/g, 'o').replace(/[úùûü]/g, 'u').replace(/ç/g, 'c');
+  }
+
+  function interpretarNota(texto, baseISO) {
+    const orig = String(texto || '').replace(/\s+/g, ' ').trim();
+    const t = semAcento(orig.toLowerCase());
+    const hoje = baseISO || dataHojeISO();
+    const dow = diaDaSemana(hoje);
+    const cortes = [];
+    let data = '', hora = '';
+    const livre = (i, f) => !cortes.some(c => i < c[1] && f > c[0]);
+    const achar = (re, fn) => {
+      const g = new RegExp(re.source, 'g');
+      let m;
+      while ((m = g.exec(t))) {
+        if (!livre(m.index, m.index + m[0].length)) continue;
+        const r = fn(m);
+        if (r) { cortes.push([m.index, m.index + m[0].length]); return r; }
+      }
+      return '';
+    };
+    const NUM = { um: 1, uma: 1, dois: 2, duas: 2, tres: 3, quatro: 4, cinco: 5, seis: 6, sete: 7 };
+    const MES = { janeiro: 1, fevereiro: 2, marco: 3, abril: 4, maio: 5, junho: 6, julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12 };
+    const SEM = { domingo: 0, segunda: 1, terca: 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6 };
+    const PRE = '(?:(?:para|pra|no|na|em|ate|ate o|ate a)\\s+)?';
+    const valida = (a, m, d) => { const x = new Date(a, m - 1, d); return x.getMonth() === m - 1 && x.getDate() === d; };
+    const anoHoje = Number(hoje.slice(0, 4));
+    const mesHoje = Number(hoje.slice(5, 7));
+    const diaHoje = Number(hoje.slice(8, 10));
+
+    const dataFns = [
+      () => achar(new RegExp('\\b' + PRE + 'depois de amanha\\b'), () => adicionarDiasISO(hoje, 2)),
+      () => achar(new RegExp('\\b' + PRE + 'amanha\\b'), () => adicionarDiasISO(hoje, 1)),
+      () => achar(new RegExp('\\b' + PRE + 'hoje\\b'), () => hoje),
+      () => achar(new RegExp('\\b' + PRE + '(?:semana que vem|proxima semana)\\b'), () => adicionarDiasISO(hoje, ((8 - dow) % 7) || 7)),
+      () => achar(/\b(?:daqui a|em)\s+(\d{1,2}|um|uma|dois|duas|tres|quatro|cinco|seis|sete)\s+(dias?|semanas?)\b/, m => {
+        const n = NUM[m[1]] || Number(m[1]);
+        return n ? adicionarDiasISO(hoje, m[2].startsWith('semana') ? n * 7 : n) : '';
+      }),
+      () => achar(new RegExp('\\b' + PRE + '(?:dia\\s+)?(\\d{1,2})/(\\d{1,2})(?:/(\\d{2,4}))?(?![\\d/])'), m => {
+        const d = Number(m[1]), mes = Number(m[2]);
+        let a = m[3] ? Number(m[3]) : anoHoje;
+        if (a < 100) a += 2000;
+        if (!valida(a, mes, d)) return '';
+        let iso = montarISOvalido(a, mes, d);
+        if (!m[3] && iso < hoje) iso = montarISOvalido(a + 1, mes, d);
+        return iso;
+      }),
+      () => achar(new RegExp('\\b' + PRE + '(?:dia\\s+)?(\\d{1,2})\\s+de\\s+(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)(?:\\s+de\\s+(\\d{4}))?\\b'), m => {
+        const d = Number(m[1]), mes = MES[m[2]];
+        const a = m[3] ? Number(m[3]) : anoHoje;
+        if (!valida(a, mes, d)) return '';
+        let iso = montarISOvalido(a, mes, d);
+        if (!m[3] && iso < hoje) iso = montarISOvalido(a + 1, mes, d);
+        return iso;
+      }),
+      () => achar(new RegExp('\\b' + PRE + '(?:nesta|neste|esta|este)?\\s*(domingo|segunda|terca|quarta|quinta|sexta|sabado)(?:-feira| feira)?(?:\\s+(?:que vem|proxima|proximo))?\\b'), m => adicionarDiasISO(hoje, ((SEM[m[1]] - dow + 7) % 7) || 7)),
+      () => achar(new RegExp('\\b' + PRE + 'dia\\s+(\\d{1,2})\\b(?!\\s*(?:/|:|h\\b))'), m => {
+        const d = Number(m[1]);
+        if (d < 1 || d > 31) return '';
+        let a = anoHoje, mes = mesHoje;
+        if (d < diaHoje) { mes++; if (mes > 12) { mes = 1; a++; } }
+        return valida(a, mes, d) ? montarISOvalido(a, mes, d) : '';
+      })
+    ];
+    for (const fn of dataFns) { data = fn(); if (data) break; }
+
+    const montarHora = (h, mm) => (h >= 0 && h <= 23 && mm >= 0 && mm <= 59) ? String(h).padStart(2, '0') + 'h' + String(mm).padStart(2, '0') : '';
+    const minutosDe = v => v === 'meia' || v === 'meio' ? 30 : (v ? Number(v) : 0);
+    const ajustaPeriodo = (h, fim) => {
+      const r = /^\s*(?:da|de|a)\s+(manha|tarde|noite)\b/.exec(t.slice(fim));
+      if (!r) return { h, fim };
+      if (h < 12 && r[1] !== 'manha') h += 12;
+      return { h, fim: fim + r[0].length };
+    };
+    const horaFns = [
+      [/\b(?:(?:as|ao)\s+)?(\d{1,2})\s*(?::|hs|h)\s*(\d{2})?(?![a-z0-9])/, m => [Number(m[1]), m[2] ? Number(m[2]) : 0]],
+      [/\bas\s+(\d{1,2})(?:\s+horas?)?(?:\s+e\s+(\d{2}|meia|meio))?(?![\d:/])\b/, m => [Number(m[1]), minutosDe(m[2])]],
+      [/\b(\d{1,2})\s+horas?(?:\s+e\s+(\d{2}|meia|meio))?\b/, m => [Number(m[1]), minutosDe(m[2])]],
+      [/\bmeio[- ]dia(?:\s+e\s+(meia|meio))?\b/, m => [12, minutosDe(m[1])]]
+    ];
+    for (const [re, fn] of horaFns) {
+      const g = new RegExp(re.source, 'g');
+      let m, ok = false;
+      while ((m = g.exec(t))) {
+        const ini = m.index, fim0 = m.index + m[0].length;
+        if (!livre(ini, fim0)) continue;
+        let [h, mm] = fn(m);
+        let fim = fim0;
+        if (!/meio[- ]dia/.test(m[0])) { const aj = ajustaPeriodo(h, fim0); h = aj.h; fim = aj.fim; }
+        const valor = montarHora(h, mm);
+        if (!valor) continue;
+        hora = valor; cortes.push([ini, fim]); ok = true; break;
+      }
+      if (ok) break;
+    }
+
+    let limpo = orig;
+    cortes.sort((a, b) => b[0] - a[0]).forEach(c => { limpo = limpo.slice(0, c[0]) + ' ' + limpo.slice(c[1]); });
+    let anterior;
+    do {
+      anterior = limpo;
+      limpo = limpo.replace(/^[\s,.;:\-–]*(?:alexandre|anota(?:\s+a[ií])?|anote(?:\s+a[ií])?|ei|olha)(?=[\s,.;:\-–]|$)[\s,.;:\-–]*/i, '');
+    } while (limpo !== anterior);
+    do {
+      anterior = limpo;
+      limpo = limpo.replace(/[\s,.;:\-–]*\b(?:para|pra|no|na|em|as|às|ao|dia|de|da|do|ate|até|que)\s*$/i, '');
+    } while (limpo !== anterior);
+    limpo = limpo.replace(/\s+([,.;])/g, '$1').replace(/\s+/g, ' ').replace(/^[\s,.;:\-–]+|[\s,.;:\-–]+$/g, '');
+    if (limpo) limpo = limpo.charAt(0).toUpperCase() + limpo.slice(1);
+    return { texto: limpo, data, hora };
+  }
+
+  function dataHojeISO() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function diaDaSemana(iso) { const [a, m, d] = iso.split('-').map(Number); return new Date(a, m - 1, d, 12).getDay(); }
+  function adicionarDiasISO(iso, n) { const [a, m, d] = iso.split('-').map(Number); const x = new Date(a, m - 1, d, 12); x.setDate(x.getDate() + n); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); }
+  function montarISOvalido(ano, mes, dia) { ano = Number(ano); mes = Number(mes); dia = Number(dia); if (!(mes >= 1 && mes <= 12 && dia >= 1 && dia <= 31)) return ''; return ano + '-' + String(mes).padStart(2, '0') + '-' + String(dia).padStart(2, '0'); }
+
+  const DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+  function rotulo(p) {
+    const out = [];
+    if (p.data) {
+      const dif = Math.round((Date.UTC(...p.data.split('-').map((v, i) => i === 1 ? v - 1 : +v)) - Date.UTC(...dataHojeISO().split('-').map((v, i) => i === 1 ? v - 1 : +v))) / 86400000);
+      const [a, m, d] = p.data.split('-');
+      out.push(dif === 0 ? 'Hoje' : dif === 1 ? 'Amanhã' : DIAS[diaDaSemana(p.data)] + ', ' + d + '/' + m);
+    }
+    if (p.hora) out.push(Number(p.hora.slice(0, 2)) + 'h' + (p.hora.slice(3) === '00' ? '' : p.hora.slice(3)));
+    return out;
+  }
+
+  function lerConfig() {
+    try {
+      const h = location.hash.replace(/^#/, '');
+      if (h.startsWith('c=')) {
+        const c = JSON.parse(atob(decodeURIComponent(h.slice(2))));
+        if (c && c.url && c.token) { localStorage.setItem(CHAVE, JSON.stringify(c)); history.replaceState(null, '', location.pathname); }
+      }
+    } catch (e) { /* ignora */ }
+    try { const salvo = JSON.parse(localStorage.getItem(CHAVE) || 'null'); if (salvo && salvo.url && salvo.token) return salvo; } catch (e) { /* ignora */ }
+    return null;
+  }
+
+  function salvarConfig() {
+    const url = document.getElementById('cfgUrl').value.trim(), token = document.getElementById('cfgToken').value.trim();
+    if (!/^https:\/\/script\.google\.com\//.test(url) || !token) { alert('Preencha o endereço (começa com https://script.google.com) e o código.'); return; }
+    try { localStorage.setItem(CHAVE, JSON.stringify({ url, token })); } catch (e) { /* ignora */ }
+    location.reload();
+  }
+
+  function mostrar(titulo, texto, classe) {
+    document.getElementById('titulo').textContent = titulo;
+    const t = document.getElementById('texto');
+    t.textContent = texto; t.className = 'texto' + (classe ? ' ' + classe : '');
+  }
+
+  function atualizar() {
+    document.getElementById('texto').textContent = textoMic || 'Pode falar…';
+    const p = interpretarNota(textoMic);
+    document.getElementById('chips').innerHTML = rotulo(p).map(c => '<span class="chip">' + c.replace(/</g, '&lt;') + '</span>').join('');
+  }
+
+  function iniciar() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { mostrar('Sem microfone', 'Este navegador não tem reconhecimento de voz. Use o Google Chrome.', 'erro'); return; }
+    textoMic = ''; cancelado = false; salvando = false;
+    rec = new SR(); rec.lang = 'pt-BR'; rec.continuous = true; rec.interimResults = true;
+    rec.onresult = (e) => {
+      let t = '';
+      for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript + ' ';
+      textoMic = t.replace(/\s+/g, ' ').trim();
+      atualizar();
+      clearTimeout(timer); timer = setTimeout(() => rec && rec.stop(), 3500);
+    };
+    rec.onerror = (e) => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { cancelado = true; mostrar('Microfone bloqueado', 'Clique no cadeado ao lado do endereço e permita o microfone. Depois toque no botão do microfone.', 'erro'); }
+      else if (e.error === 'audio-capture') { cancelado = true; mostrar('Sem microfone', 'Não encontrei um microfone neste computador.', 'erro'); }
+    };
+    rec.onend = () => { ativo = false; document.getElementById('btnMic').classList.remove('ouvindo'); clearTimeout(timer); finalizar(); };
+    try { rec.start(); } catch (e) { return; }
+    ativo = true;
+    document.getElementById('btnMic').classList.add('ouvindo');
+    mostrar('Ouvindo…', 'Pode falar…');
+    document.getElementById('chips').innerHTML = '';
+    clearTimeout(timer); timer = setTimeout(() => { if (!textoMic && rec) rec.stop(); }, 8000);
+  }
+
+  function alternar() { if (ativo) { rec.stop(); } else { iniciar(); } }
+  function pararESalvar() { if (ativo) rec.stop(); else finalizar(); }
+  function cancelar() { cancelado = true; if (ativo) rec.stop(); else window.close(); setTimeout(() => window.close(), 200); }
+
+  function finalizar() {
+    if (cancelado || salvando) return;
+    const texto = textoMic.trim();
+    if (!texto) { mostrar('Não ouvi nada', 'Toque no microfone e tente de novo.', 'erro'); return; }
+    salvando = true;
+    const p = interpretarNota(texto);
+    const corpo = { acao: 'nota', token: cfg.token, nota: p.texto || (texto.charAt(0).toUpperCase() + texto.slice(1)), data: p.data, hora: p.hora };
+    mostrar('Salvando…', corpo.nota);
+    fetch(cfg.url, { method: 'POST', body: JSON.stringify(corpo), redirect: 'follow' })
+      .then(r => r.json())
+      .then(r => {
+        if (r && r.sucesso) concluir(corpo, p);
+        else { salvando = false; mostrar('Não salvou', r && r.erro === 'nao_autorizado' ? 'Código secreto incorreto. Abra a página pelo botão do app.' : 'O servidor recusou a nota: ' + ((r && r.erro) || 'erro desconhecido'), 'erro'); }
+      })
+      .catch(() => {
+        // Sem resposta legível: tenta de novo só para enviar (sem ler o retorno)
+        fetch(cfg.url, { method: 'POST', body: JSON.stringify(corpo), mode: 'no-cors' })
+          .then(() => concluir(corpo, p, true))
+          .catch(() => { salvando = false; mostrar('Sem conexão', 'Não consegui enviar a nota. Confira a internet e o endereço do app.', 'erro'); });
+      });
+  }
+
+  function concluir(corpo, p, incerto) {
+    document.getElementById('titulo').textContent = incerto ? 'Enviada' : 'Nota salva ✓';
+    const t = document.getElementById('texto');
+    t.className = 'texto ok';
+    t.textContent = corpo.nota;
+    document.getElementById('chips').innerHTML = rotulo(p).map(c => '<span class="chip">' + c + '</span>').join('');
+    setTimeout(() => window.close(), 1300);
+  }
+
+  window.addEventListener('load', () => {
+    cfg = lerConfig();
+    if (!cfg) { document.getElementById('telaNota').classList.add('oculto'); document.getElementById('telaConfig').classList.remove('oculto'); document.getElementById('titulo').textContent = 'Configurar'; return; }
+    iniciar();
+  });
+</script>
+</body>
+</html>
