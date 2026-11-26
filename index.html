@@ -4,33 +4,41 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nota por voz</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root { --laranja:#F26B1D; --vermelho:#C83C3C; --verde:#2E8B57; --texto:#3A3A32; --fundo:#F5F4F0; }
+  :root { --laranja:#F4721E; --vermelho:#C85B5B; --verde:#39856A; --texto:#2B3445; --fundo:#F7F5F1; --escuro:#1F2937; }
   * { box-sizing: border-box; }
-  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--fundo); font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--texto); padding:16px; }
-  .cartao { width:100%; max-width:360px; background:#FFF3B0; border-radius:4px 4px 18px 4px; padding:18px; box-shadow:0 8px 24px rgba(0,0,0,.18); }
-  .titulo { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#8A6D00; margin-bottom:8px; }
-  .texto { font-size:17px; line-height:1.45; min-height:84px; white-space:pre-wrap; word-break:break-word; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--fundo); font-family:'Nunito','Segoe UI',system-ui,sans-serif; color:var(--texto); padding:16px; }
+  .cartao { width:100%; max-width:380px; background:#FBD3AE; border-radius:20px; padding:20px 22px 18px; box-shadow:0 14px 36px rgba(42,53,69,.16); transition:background .25s; }
+  .cartao:has(.texto.ok) { background:#CDEADB; }
+  .cartao:has(.texto.erro) { background:#F6C4BE; }
+  .rotulo { font-size:10px; font-weight:700; color:rgba(31,41,55,.65); letter-spacing:.2px; margin-bottom:6px; }
+  .titulo { font-size:20px; font-weight:800; line-height:1.2; color:var(--escuro); }
+  .linha { height:1px; background:rgba(31,41,55,.18); margin:12px 0 12px; }
+  .texto { font-size:14px; font-weight:600; line-height:1.55; min-height:84px; white-space:pre-wrap; word-break:break-word; color:rgba(31,41,55,.85); }
   .chips { min-height:26px; margin-top:8px; }
-  .chip { display:inline-block; font-size:12px; font-weight:600; background:rgba(255,255,255,.7); padding:4px 10px; border-radius:999px; margin-right:6px; }
-  .acoes { display:flex; gap:8px; margin-top:14px; align-items:center; }
-  button { font:inherit; cursor:pointer; border:none; border-radius:999px; padding:10px 16px; font-weight:600; }
-  .sec { background:rgba(255,255,255,.7); color:var(--texto); }
-  .pri { background:var(--laranja); color:#fff; }
-  .mic { width:56px; height:56px; padding:0; margin-left:auto; background:var(--laranja); color:#fff; display:flex; align-items:center; justify-content:center; }
-  .mic svg { width:26px; height:26px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .chip { display:inline-block; font-size:11px; font-weight:700; background:rgba(255,255,255,.7); padding:4px 11px; border-radius:999px; margin-right:6px; color:var(--escuro); }
+  .acoes { display:flex; gap:8px; margin-top:16px; align-items:center; }
+  button { font:inherit; cursor:pointer; border:none; border-radius:999px; padding:10px 18px; font-weight:700; font-size:13px; }
+  .sec { background:rgba(255,255,255,.75); color:var(--escuro); }
+  .pri { background:var(--escuro); color:#fff; }
+  .mic { width:54px; height:54px; padding:0; margin-left:auto; background:var(--laranja); color:#fff; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px rgba(244,114,30,.4); }
+  .mic svg { width:25px; height:25px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
   .mic.ouvindo { background:var(--vermelho); animation:pulso 1.3s infinite; }
-  @keyframes pulso { 0% { box-shadow:0 0 0 0 rgba(200,60,60,.5); } 70% { box-shadow:0 0 0 16px rgba(200,60,60,0); } 100% { box-shadow:0 0 0 0 rgba(200,60,60,0); } }
-  .ok { color:var(--verde); font-weight:700; }
-  .erro { color:var(--vermelho); font-weight:600; }
-  label { display:block; font-size:12px; margin-top:10px; }
-  input { width:100%; padding:9px; border:1px solid #d6c96a; border-radius:10px; font:inherit; margin-top:4px; background:#fffdf0; }
+  @keyframes pulso { 0% { box-shadow:0 0 0 0 rgba(200,91,91,.5); } 70% { box-shadow:0 0 0 16px rgba(200,91,91,0); } 100% { box-shadow:0 0 0 0 rgba(200,91,91,0); } }
+  .ok { color:#1E6B43; font-weight:700; }
+  .erro { color:#8A2B24; font-weight:700; }
+  label { display:block; font-size:12px; margin-top:10px; font-weight:700; }
+  input { width:100%; padding:9px; border:1px solid rgba(31,41,55,.2); border-radius:10px; font:inherit; margin-top:4px; background:rgba(255,255,255,.85); }
   .oculto { display:none; }
 </style>
 </head>
 <body>
 <div class="cartao">
+  <div class="rotulo">Nota por voz</div>
   <div class="titulo" id="titulo">Nota por voz</div>
+  <div class="linha"></div>
 
   <div id="telaNota">
     <div class="texto" id="texto">Pode falar…</div>
@@ -222,8 +230,26 @@
     t.textContent = texto; t.className = 'texto' + (classe ? ' ' + classe : '');
   }
 
+  // Várias ordens numa fala: diga "pronto" entre elas. Também separa sozinho no próximo "agendar/desmarcar/remarcar/cancelar" quando a fala começa com uma ordem.
+  const VERBOS_ORDEM = 'agendar|agende|agendo|marcar|marque|marco|encaixar|encaixe|reservar|reserve|desmarcar|desmarque|desmarco|cancelar|cancele|cancelo|remarcar|remarque|remarco|reagendar|reagende|reagendo';
+  function dividirOrdens(texto) {
+    const base = String(texto || '').replace(/\s+/g, ' ').trim();
+    if (!base) return [];
+    const ehOrdem = new RegExp('^(?:por favor[,\\s]+)?(?:' + VERBOS_ORDEM + ')\\b', 'i');
+    let partes = base.split(/[\s,.;]*\b(?:pronto|prontinho)\b[\s,.;]*/i).map(x => x.replace(/^[\s,.;]+|[\s,.;]+$/g, '')).filter(Boolean);
+    const saida = [];
+    partes.forEach(parte => {
+      if (!ehOrdem.test(parte)) { saida.push(parte); return; }
+      const re = new RegExp('[\\s,;]+(?=(?:' + VERBOS_ORDEM + ')\\b)', 'gi');
+      parte.split(re).map(x => x.trim()).filter(Boolean).forEach(x => saida.push(x));
+    });
+    return saida.slice(0, 10);
+  }
+
   function atualizar() {
     document.getElementById('texto').textContent = textoMic || 'Pode falar…';
+    const ordens = dividirOrdens(textoMic);
+    if (ordens.length > 1) { document.getElementById('chips').innerHTML = '<span class="chip">' + ordens.length + ' ordens</span>'; return; }
     const p = interpretarNota(textoMic);
     document.getElementById('chips').innerHTML = rotulo(p).map(c => '<span class="chip">' + c.replace(/</g, '&lt;') + '</span>').join('');
   }
@@ -263,6 +289,8 @@
     const texto = textoMic.trim();
     if (!texto) { mostrar('Não ouvi nada', 'Toque no microfone e tente de novo.', 'erro'); return; }
     salvando = true;
+    const ordens = dividirOrdens(texto);
+    if (ordens.length > 1) { enviarLote(ordens); return; }
     const p = interpretarNota(texto);
     const corpo = { acao: 'nota', token: cfg.token, nota: p.texto || (texto.charAt(0).toUpperCase() + texto.slice(1)), data: p.data, hora: p.hora };
     mostrar('Salvando…', corpo.nota);
@@ -280,16 +308,42 @@
       });
   }
 
+  function enviarLote(ordens) {
+    const itens = ordens.map(o => { const p = interpretarNota(o); return { nota: p.texto || (o.charAt(0).toUpperCase() + o.slice(1)), data: p.data, hora: p.hora }; });
+    const corpo = { acao: 'lote', token: cfg.token, itens: itens };
+    mostrar('Salvando ' + itens.length + ' ordens…', itens.map(i => i.nota).join('\n'));
+    fetch(cfg.url, { method: 'POST', body: JSON.stringify(corpo), redirect: 'follow' })
+      .then(r => r.json())
+      .then(r => {
+        if (r && r.sucesso && Array.isArray(r.resultados)) concluirLote(r.resultados);
+        else { salvando = false; mostrar('Não salvou', r && r.erro === 'nao_autorizado' ? 'Código secreto incorreto. Abra a página pelo botão do app.' : 'O servidor recusou: ' + ((r && r.erro) || 'erro desconhecido'), 'erro'); }
+      })
+      .catch(() => { salvando = false; mostrar('Não confirmado', 'Não recebi a resposta do servidor. Confira a Agenda no app antes de repetir as ordens.', 'erro'); });
+  }
+
+  function concluirLote(resultados) {
+    try { if (window.opener && !window.opener.closed) window.opener.postMessage({ tipo: 'notaMic', resultados: resultados }, '*'); } catch (e) { /* o app recarrega ao fechar */ }
+    const certos = resultados.filter(r => ['Agendado', 'Desmarcado', 'Remarcado'].indexOf((r && r.agendamento) || '') >= 0).length;
+    const tudo = certos === resultados.length;
+    document.getElementById('titulo').textContent = tudo ? resultados.length + ' ordens feitas ✓' : certos + ' de ' + resultados.length + ' feitas — veja o app';
+    const t = document.getElementById('texto');
+    t.className = 'texto ' + (tudo ? 'ok' : 'erro');
+    t.textContent = resultados.map(r => ((r && ['Agendado', 'Desmarcado', 'Remarcado'].indexOf(r.agendamento) >= 0) ? '✓ ' : '! ') + String((r && r.mensagem) || '').split(/\.\s/)[0].replace(/\.$/, '')).join('\n');
+    document.getElementById('chips').innerHTML = '';
+    setTimeout(() => window.close(), tudo ? 2500 : 8000);
+  }
+
   function concluir(corpo, p, incerto, r) {
     const ag = (r && r.agendamento) || '';
-    const titulos = { 'Agendado': 'Agendado ✓', 'Confirmar paciente novo': 'Nota salva — confirme no app', 'Sem vaga': 'Nota salva — sem vaga', 'Revisar': 'Nota salva — revisar no app' };
+    const titulos = { 'Agendado': 'Agendado ✓', 'Desmarcado': 'Desmarcado ✓', 'Remarcado': 'Remarcado ✓', 'Confirmar paciente novo': 'Nota salva — confirme no app', 'Sem vaga': 'Nota salva — sem vaga', 'Revisar': 'Nota salva — revisar no app' };
     try { if (window.opener && !window.opener.closed) window.opener.postMessage({ tipo: 'notaMic', resultado: r }, '*'); } catch (e) { /* o app recarrega ao fechar */ }
     document.getElementById('titulo').textContent = incerto ? 'Enviada' : (titulos[ag] || 'Nota salva ✓');
     const t = document.getElementById('texto');
-    t.className = 'texto ' + (ag === 'Agendado' || !ag ? 'ok' : 'erro');
+    const deuCerto = ['Agendado', 'Desmarcado', 'Remarcado'].indexOf(ag) >= 0;
+    t.className = 'texto ' + (deuCerto || !ag ? 'ok' : 'erro');
     t.textContent = (r && r.mensagem) ? r.mensagem : corpo.nota;
     document.getElementById('chips').innerHTML = rotulo(p).map(c => '<span class="chip">' + c + '</span>').join('');
-    setTimeout(() => window.close(), ag && ag !== 'Agendado' ? 6000 : (ag === 'Agendado' ? 3000 : 900));
+    setTimeout(() => window.close(), deuCerto ? 1200 : (ag ? 6000 : 900));
   }
 
   window.addEventListener('load', () => {
