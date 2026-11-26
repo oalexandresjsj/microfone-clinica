@@ -228,6 +228,7 @@
     document.getElementById('chips').innerHTML = rotulo(p).map(c => '<span class="chip">' + c.replace(/</g, '&lt;') + '</span>').join('');
   }
 
+  try { window.moveTo(Math.max(0, Math.round((screen.availWidth - window.outerWidth) / 2)), Math.max(0, Math.round((screen.availHeight - window.outerHeight) / 2))); } catch (e) { /* ok */ }
   function iniciar() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { mostrar('Sem microfone', 'Este navegador não tem reconhecimento de voz. Use o Google Chrome.', 'erro'); return; }
@@ -238,7 +239,7 @@
       for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript + ' ';
       textoMic = t.replace(/\s+/g, ' ').trim();
       atualizar();
-      clearTimeout(timer); timer = setTimeout(() => rec && rec.stop(), 3500);
+      clearTimeout(timer); timer = setTimeout(() => { if (rec && ativo) { try { rec.stop(); } catch (x) {} finalizar(); } }, 1300);
     };
     rec.onerror = (e) => {
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { cancelado = true; mostrar('Microfone bloqueado', 'Clique no cadeado ao lado do endereço e permita o microfone. Depois toque no botão do microfone.', 'erro'); }
@@ -248,9 +249,9 @@
     try { rec.start(); } catch (e) { return; }
     ativo = true;
     document.getElementById('btnMic').classList.add('ouvindo');
-    mostrar('Ouvindo…', 'Pode falar…');
+    mostrar('Ouvindo…', 'Pode falar… (toque no microfone para enviar agora)');
     document.getElementById('chips').innerHTML = '';
-    clearTimeout(timer); timer = setTimeout(() => { if (!textoMic && rec) rec.stop(); }, 8000);
+    clearTimeout(timer); timer = setTimeout(() => { if (!textoMic && rec) rec.stop(); }, 6000);
   }
 
   function alternar() { if (ativo) { rec.stop(); } else { iniciar(); } }
@@ -282,17 +283,20 @@
   function concluir(corpo, p, incerto, r) {
     const ag = (r && r.agendamento) || '';
     const titulos = { 'Agendado': 'Agendado ✓', 'Confirmar paciente novo': 'Nota salva — confirme no app', 'Sem vaga': 'Nota salva — sem vaga', 'Revisar': 'Nota salva — revisar no app' };
+    try { if (window.opener && !window.opener.closed) window.opener.postMessage({ tipo: 'notaMic', resultado: r }, '*'); } catch (e) { /* o app recarrega ao fechar */ }
     document.getElementById('titulo').textContent = incerto ? 'Enviada' : (titulos[ag] || 'Nota salva ✓');
     const t = document.getElementById('texto');
     t.className = 'texto ' + (ag === 'Agendado' || !ag ? 'ok' : 'erro');
     t.textContent = (r && r.mensagem) ? r.mensagem : corpo.nota;
     document.getElementById('chips').innerHTML = rotulo(p).map(c => '<span class="chip">' + c + '</span>').join('');
-    setTimeout(() => window.close(), ag && ag !== 'Agendado' ? 6000 : (ag === 'Agendado' ? 4000 : 1300));
+    setTimeout(() => window.close(), ag && ag !== 'Agendado' ? 6000 : (ag === 'Agendado' ? 3000 : 900));
   }
 
   window.addEventListener('load', () => {
     cfg = lerConfig();
     if (!cfg) { document.getElementById('telaNota').classList.add('oculto'); document.getElementById('telaConfig').classList.remove('oculto'); document.getElementById('titulo').textContent = 'Configurar'; return; }
+    // Acorda o servidor enquanto você fala (a primeira chamada costuma demorar alguns segundos)
+    try { fetch(cfg.url, { method: 'POST', body: JSON.stringify({ acao: 'ping', token: cfg.token }), mode: 'no-cors' }).catch(() => {}); } catch (e) { /* sem aquecimento */ }
     iniciar();
   });
 </script>
